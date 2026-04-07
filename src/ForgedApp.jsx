@@ -9915,8 +9915,6 @@ export default function ForgedApp() {
       newItems: [],
       rivals: [],
       personalChallenges: [],
-      stamina: 20,
-      staminaLastRegen: Date.now(),
     });
     setScreen("main");
     // Save new character to cloud if logged in
