@@ -1463,16 +1463,293 @@ function ItemModal({ item, currentlyEquipped, fromInventory, onEquip, onSellFrom
 }
 
 // ─── ONBOARDING ───────────────────────────────────────────────────────────────
+
+// ─── CHARACTER APPEARANCE SYSTEM ──────────────────────────────────────────────
+
+const SKIN_TONES = [
+  { id:"s1", name:"Fair",    color:"#FDDBB4", shadow:"#E8B88A" },
+  { id:"s2", name:"Light",   color:"#F5C896", shadow:"#D4A070" },
+  { id:"s3", name:"Medium",  color:"#C68642", shadow:"#A0632E" },
+  { id:"s4", name:"Tan",     color:"#8D5524", shadow:"#6B3A15" },
+  { id:"s5", name:"Dark",    color:"#5C3317", shadow:"#3D1F0A" },
+  { id:"s6", name:"Deep",    color:"#3B1A08", shadow:"#200E02" },
+];
+
+const HAIR_STYLES = [
+  { id:"h1", name:"Short",   path:"M18,22 Q24,10 36,10 Q48,10 54,22 Q50,14 36,12 Q22,14 18,22Z" },
+  { id:"h2", name:"Long",    path:"M16,22 Q20,8 36,8 Q52,8 56,22 L58,55 Q54,48 52,55 L50,35 Q48,50 36,52 Q24,50 22,35 L20,55 Q18,48 14,55 Z" },
+  { id:"h3", name:"Mohawk",  path:"M30,22 Q33,5 36,4 Q39,5 42,22 Q39,8 36,7 Q33,8 30,22Z" },
+  { id:"h4", name:"Bald",    path:"" },
+  { id:"h5", name:"Braids",  path:"M18,22 Q22,8 36,8 Q50,8 54,22 Q50,12 36,10 Q22,12 18,22Z M26,38 Q24,50 22,65 Q24,52 26,44Z M46,38 Q48,50 50,65 Q48,52 46,44Z" },
+];
+
+const HAIR_COLORS = [
+  { id:"hc1", name:"Black",   color:"#1a1a1a" },
+  { id:"hc2", name:"Brown",   color:"#5C3317" },
+  { id:"hc3", name:"Blonde",  color:"#D4A827" },
+  { id:"hc4", name:"Red",     color:"#8B2500" },
+  { id:"hc5", name:"White",   color:"#E8E8E8" },
+  { id:"hc6", name:"Purple",  color:"#6A0DAD" },
+];
+
+const FACE_STYLES = [
+  { id:"f1", name:"Stern",    eyes:"M28,36 L32,36 M40,36 L44,36", mouth:"M30,46 Q36,50 42,46" },
+  { id:"f2", name:"Fierce",   eyes:"M27,35 L32,37 M40,37 L45,35", mouth:"M31,47 Q36,44 41,47" },
+  { id:"f3", name:"Calm",     eyes:"M28,37 L33,37 M39,37 L44,37", mouth:"M30,46 Q36,49 42,46" },
+  { id:"f4", name:"Scarred",  eyes:"M28,36 L32,36 M40,36 L44,36", mouth:"M31,47 Q36,50 41,47", scar:"M33,30 L35,42" },
+];
+
+const BODY_TYPES = [
+  { id:"b1", name:"Lean",     torsoW:28, shoulderW:36 },
+  { id:"b2", name:"Athletic", torsoW:32, shoulderW:42 },
+  { id:"b3", name:"Stocky",   torsoW:38, shoulderW:46 },
+];
+
+// Map gear slot+name to visual overrides
+function getGearLayer(slot, item) {
+  if (!item) return null;
+  const name = item.name?.toLowerCase() || "";
+  const rarity = item.rarity || "Common";
+  const rarityColor = { Common:"#aaa", Uncommon:"#27ae60", Rare:"#2980b9", Epic:"#8e44ad", Legendary:"#c9a84c" }[rarity] || "#aaa";
+
+  if (slot === "head") {
+    if (name.includes("helm") || name.includes("helmet"))
+      return { type:"helmet", color:rarityColor, shape:"full" };
+    if (name.includes("hood") || name.includes("cap") || name.includes("hat"))
+      return { type:"hood", color:rarityColor };
+    if (name.includes("crown") || name.includes("tiara"))
+      return { type:"crown", color:rarityColor };
+    return { type:"hood", color:rarityColor };
+  }
+  if (slot === "body") {
+    if (name.includes("plate") || name.includes("armor") || name.includes("mail"))
+      return { type:"plate", color:rarityColor };
+    if (name.includes("robe") || name.includes("cloak") || name.includes("tunic"))
+      return { type:"robe", color:rarityColor };
+    return { type:"vest", color:rarityColor };
+  }
+  if (slot === "weapon") {
+    const dmgType = (item.dmgTypes?.[0]) || "melee";
+    if (dmgType === "magic") return { type:"staff", color:rarityColor };
+    if (dmgType === "ranged") return { type:"bow", color:rarityColor };
+    if (name.includes("axe")) return { type:"axe", color:rarityColor };
+    if (name.includes("dagger") || name.includes("blade")) return { type:"dagger", color:rarityColor };
+    return { type:"sword", color:rarityColor };
+  }
+  if (slot === "hands") return { type:"gloves", color:rarityColor };
+  if (slot === "feet")  return { type:"boots",  color:rarityColor };
+  if (slot === "offhand") return { type:"shield", color:rarityColor };
+  return null;
+}
+
+// ─── MAIN CHARACTER SVG ───────────────────────────────────────────────────────
+function CharacterSVG({ appearance = {}, equipped = {}, size = 120, animated = false }) {
+  const skin     = SKIN_TONES.find(s => s.id === appearance.skinTone)    || SKIN_TONES[1];
+  const hairStyle= HAIR_STYLES.find(h => h.id === appearance.hairStyle)  || HAIR_STYLES[0];
+  const hairColor= HAIR_COLORS.find(h => h.id === appearance.hairColor)  || HAIR_COLORS[0];
+  const face     = FACE_STYLES.find(f => f.id === appearance.faceStyle)  || FACE_STYLES[0];
+  const body     = BODY_TYPES.find(b => b.id  === appearance.bodyType)   || BODY_TYPES[1];
+
+  const tw = body.torsoW;
+  const sw = body.shoulderW;
+  const cx = 36;
+
+  // Gear layers
+  const headGear   = getGearLayer("head",    equipped.head);
+  const bodyGear   = getGearLayer("body",    equipped.body);
+  const weaponGear = getGearLayer("weapon",  equipped.weapon);
+  const handsGear  = getGearLayer("hands",   equipped.hands);
+  const feetGear   = getGearLayer("feet",    equipped.feet);
+  const offhandGear= getGearLayer("offhand", equipped.offhand);
+
+  const animStyle = animated ? { animation:"float 3s ease-in-out infinite" } : {};
+
+  return (
+    <svg viewBox="0 0 72 100" width={size} height={size * 100/72} style={{...animStyle, display:"block"}}>
+      <defs>
+        <style>{`@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-3px)} }`}</style>
+      </defs>
+
+      {/* ── SHADOW ── */}
+      <ellipse cx="36" cy="97" rx="16" ry="3" fill="rgba(0,0,0,0.3)"/>
+
+      {/* ── BOOTS / FEET ── */}
+      <g>
+        {feetGear ? (
+          <>
+            <rect x={cx-tw/2-1} y="80" width="13" height="12" rx="3" fill={feetGear.color} opacity="0.9"/>
+            <rect x={cx+tw/2-12} y="80" width="13" height="12" rx="3" fill={feetGear.color} opacity="0.9"/>
+          </>
+        ) : (
+          <>
+            <rect x={cx-tw/2-1} y="80" width="12" height="11" rx="2" fill={skin.shadow}/>
+            <rect x={cx+tw/2-11} y="80" width="12" height="11" rx="2" fill={skin.shadow}/>
+          </>
+        )}
+      </g>
+
+      {/* ── LEGS ── */}
+      <rect x={cx-tw/2} y="62" width={tw/2-1} height="20" rx="3" fill={bodyGear?.type==="plate" ? bodyGear.color : skin.color} opacity={bodyGear?.type==="plate"?"0.85":"1"}/>
+      <rect x={cx+1} y="62" width={tw/2-1} height="20" rx="3" fill={bodyGear?.type==="plate" ? bodyGear.color : skin.color} opacity={bodyGear?.type==="plate"?"0.85":"1"}/>
+
+      {/* ── BODY / TORSO ── */}
+      {bodyGear ? (
+        <>
+          {/* Base skin */}
+          <rect x={cx-tw/2} y="44" width={tw} height="20" rx="4" fill={skin.color}/>
+          {/* Armor overlay */}
+          {bodyGear.type === "plate" && (
+            <>
+              <rect x={cx-tw/2} y="44" width={tw} height="20" rx="4" fill={bodyGear.color} opacity="0.85"/>
+              <line x1={cx} y1="44" x2={cx} y2="64" stroke="rgba(0,0,0,0.3)" strokeWidth="1"/>
+              <rect x={cx-tw/2+2} y="46" width={tw-4} height="6" rx="2" fill="rgba(255,255,255,0.15)"/>
+            </>
+          )}
+          {bodyGear.type === "robe" && (
+            <rect x={cx-tw/2-2} y="44" width={tw+4} height="22" rx="5" fill={bodyGear.color} opacity="0.8"/>
+          )}
+          {bodyGear.type === "vest" && (
+            <rect x={cx-tw/2+1} y="45" width={tw-2} height="18" rx="3" fill={bodyGear.color} opacity="0.75"/>
+          )}
+        </>
+      ) : (
+        <rect x={cx-tw/2} y="44" width={tw} height="20" rx="4" fill={skin.color}/>
+      )}
+
+      {/* ── SHOULDERS ── */}
+      <ellipse cx={cx-sw/2} cy="46" rx="6" ry="5" fill={bodyGear ? bodyGear.color : skin.color} opacity={bodyGear?"0.9":"1"}/>
+      <ellipse cx={cx+sw/2} cy="46" rx="6" ry="5" fill={bodyGear ? bodyGear.color : skin.color} opacity={bodyGear?"0.9":"1"}/>
+
+      {/* ── ARMS ── */}
+      {/* Left arm */}
+      <rect x={cx-sw/2-4} y="46" width="8" height="18" rx="4" fill={handsGear ? handsGear.color : skin.color} opacity={handsGear?"0.85":"1"}/>
+      {/* Right arm */}
+      <rect x={cx+sw/2-4} y="46" width="8" height="18" rx="4" fill={handsGear ? handsGear.color : skin.color} opacity={handsGear?"0.85":"1"}/>
+
+      {/* ── WEAPON (right hand) ── */}
+      {weaponGear && (
+        <g transform={`translate(${cx+sw/2+4}, 44)`}>
+          {weaponGear.type === "sword" && (
+            <>
+              <rect x="-1" y="-2" width="3" height="26" rx="1" fill={weaponGear.color}/>
+              <rect x="-5" y="4" width="11" height="2" rx="1" fill={weaponGear.color} opacity="0.7"/>
+              <polygon points="-1,-2 1,-2 0,-8" fill={weaponGear.color}/>
+            </>
+          )}
+          {weaponGear.type === "axe" && (
+            <>
+              <rect x="-1" y="0" width="3" height="24" rx="1" fill={weaponGear.color}/>
+              <ellipse cx="3" cy="4" rx="6" ry="8" fill={weaponGear.color} opacity="0.85"/>
+            </>
+          )}
+          {weaponGear.type === "dagger" && (
+            <>
+              <rect x="-1" y="2" width="2" height="16" rx="1" fill={weaponGear.color}/>
+              <polygon points="-1,2 1,2 0,-4" fill={weaponGear.color}/>
+              <rect x="-4" y="6" width="8" height="2" rx="1" fill={weaponGear.color} opacity="0.7"/>
+            </>
+          )}
+          {weaponGear.type === "staff" && (
+            <>
+              <rect x="-1" y="-6" width="3" height="32" rx="1" fill={weaponGear.color} opacity="0.8"/>
+              <circle cx="0" cy="-8" r="5" fill={weaponGear.color} opacity="0.9"/>
+              <circle cx="0" cy="-8" r="3" fill="rgba(255,255,255,0.4)"/>
+            </>
+          )}
+          {weaponGear.type === "bow" && (
+            <>
+              <path d="M-2,-6 Q-8,10 -2,26" stroke={weaponGear.color} strokeWidth="2.5" fill="none"/>
+              <line x1="-2" y1="-6" x2="-2" y2="26" stroke={weaponGear.color} strokeWidth="1" opacity="0.5"/>
+            </>
+          )}
+        </g>
+      )}
+
+      {/* ── OFFHAND / SHIELD (left hand) ── */}
+      {offhandGear && offhandGear.type === "shield" && (
+        <g transform={`translate(${cx-sw/2-10}, 46)`}>
+          <path d="M0,0 L10,0 L10,16 Q5,20 0,16 Z" fill={offhandGear.color} opacity="0.85"/>
+          <line x1="5" y1="2" x2="5" y2="15" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+        </g>
+      )}
+
+      {/* ── NECK ── */}
+      <rect x={cx-4} y="38" width="8" height="8" rx="2" fill={skin.color}/>
+
+      {/* ── HEAD ── */}
+      <ellipse cx={cx} cy="30" rx="14" ry="16" fill={skin.color}/>
+
+      {/* ── HAIR (behind face) ── */}
+      {hairStyle.path && (
+        <path d={hairStyle.path} fill={hairColor.color} opacity="0.95"/>
+      )}
+
+      {/* ── FACE ── */}
+      {/* Eyes */}
+      <path d={face.eyes} stroke={skin.shadow} strokeWidth="2" fill="none" strokeLinecap="round"/>
+      {/* Pupils */}
+      <circle cx="30" cy="36" r="1.5" fill="#1a1a1a"/>
+      <circle cx="42" cy="36" r="1.5" fill="#1a1a1a"/>
+      {/* Mouth */}
+      <path d={face.mouth} stroke={skin.shadow} strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+      {/* Scar if any */}
+      {face.scar && <path d={face.scar} stroke="#8B3A3A" strokeWidth="1.5" strokeLinecap="round"/>}
+
+      {/* ── HEAD GEAR ── */}
+      {headGear && (
+        <>
+          {headGear.type === "helmet" && (
+            <>
+              <ellipse cx={cx} cy="28" rx="16" ry="17" fill={headGear.color} opacity="0.85"/>
+              <rect x={cx-16} y="30" width="32" height="6" rx="1" fill={headGear.color} opacity="0.7"/>
+              <rect x={cx-5} y="22" width="10" height="20" rx="1" fill="rgba(0,0,0,0.25)"/>
+            </>
+          )}
+          {headGear.type === "hood" && (
+            <path d={`M${cx-15},28 Q${cx-14},12 ${cx},12 Q${cx+14},12 ${cx+15},28 Q${cx+10},18 ${cx},18 Q${cx-10},18 ${cx-15},28Z`}
+              fill={headGear.color} opacity="0.85"/>
+          )}
+          {headGear.type === "crown" && (
+            <>
+              <rect x={cx-13} y="16" width="26" height="5" rx="1" fill={headGear.color} opacity="0.9"/>
+              <polygon points={`${cx-10},16 ${cx-8},8 ${cx-6},16`} fill={headGear.color}/>
+              <polygon points={`${cx-3},16 ${cx},7 ${cx+3},16`} fill={headGear.color}/>
+              <polygon points={`${cx+6},16 ${cx+8},8 ${cx+10},16`} fill={headGear.color}/>
+            </>
+          )}
+        </>
+      )}
+
+      {/* ── CLASS EMBLEM (chest) ── */}
+      {!bodyGear && (
+        <circle cx={cx} cy="52" r="4" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)" strokeWidth="0.5"/>
+      )}
+    </svg>
+  );
+}
+
 function Onboarding({ onComplete }) {
   const [step, setStep] = useState(0);
-  const [d, setD] = useState({ username:"",displayName:"",gender:"",dob:"",height:"",weight:"",goal:"",days:"",experience:"",results:[],planning:"",cls:null });
+  const TOTAL_STEPS = 5;
+  const defaultAppearance = { skinTone:"s2", hairStyle:"h1", hairColor:"hc1", faceStyle:"f1", bodyType:"b2" };
+  const [d, setD] = useState({
+    username:"",displayName:"",gender:"",dob:"",height:"",weight:"",
+    goal:"",days:"",experience:"",results:[],planning:"",cls:null,
+    appearance: defaultAppearance,
+  });
+
+  const setApp = (key, val) => setD(prev => ({...prev, appearance:{...prev.appearance,[key]:val}}));
+
   const steps = [
+    // 0 — Welcome
     <div key="w" className="ob-step">
       <div className="forge-logo">⚒️</div>
       <h1 className="forge-title">FORGED</h1>
       <p className="forge-sub">Train in the real world. Conquer the dungeon.</p>
       <button className="btn-primary" onClick={() => setStep(1)}>Begin Your Quest</button>
     </div>,
+
+    // 1 — Account
     <div key="a" className="ob-step">
       <h2>Create Account</h2>
       <div className="ig"><label>Username</label><input value={d.username} onChange={e=>setD({...d,username:e.target.value})} placeholder="hero_42"/></div>
@@ -1485,11 +1762,90 @@ function Onboarding({ onComplete }) {
       </div>
       <button className="btn-primary" onClick={()=>setStep(2)} disabled={!d.username||!d.displayName}>Continue</button>
     </div>,
+
+    // 2 — Appearance
+    <div key="app" className="ob-step">
+      <h2>Forge Your Look</h2>
+      <p className="sdesc">Customize your hero's appearance</p>
+
+      {/* Live preview */}
+      <div style={{display:"flex",justifyContent:"center",margin:"1rem 0",background:"linear-gradient(135deg,#1a0a2e,#0d0820)",borderRadius:16,padding:"1.5rem",border:"1px solid #c9a84c33"}}>
+        <CharacterSVG appearance={d.appearance} equipped={{}} size={110} animated={true}/>
+      </div>
+
+      {/* Skin tone */}
+      <div className="ig">
+        <label>Skin Tone</label>
+        <div style={{display:"flex",gap:".5rem",flexWrap:"wrap"}}>
+          {SKIN_TONES.map(s => (
+            <button key={s.id} onClick={()=>setApp("skinTone",s.id)} style={{
+              width:36,height:36,borderRadius:"50%",background:s.color,
+              border:d.appearance.skinTone===s.id?"3px solid var(--gold)":"3px solid transparent",
+              cursor:"pointer",transition:"border .15s",
+            }} title={s.name}/>
+          ))}
+        </div>
+      </div>
+
+      {/* Hair style */}
+      <div className="ig">
+        <label>Hair Style</label>
+        <div className="bgrp">
+          {HAIR_STYLES.map(h => (
+            <button key={h.id} className={`bc ${d.appearance.hairStyle===h.id?"active":""}`}
+              onClick={()=>setApp("hairStyle",h.id)}>{h.name}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Hair color */}
+      <div className="ig">
+        <label>Hair Color</label>
+        <div style={{display:"flex",gap:".5rem",flexWrap:"wrap"}}>
+          {HAIR_COLORS.map(h => (
+            <button key={h.id} onClick={()=>setApp("hairColor",h.id)} style={{
+              width:28,height:28,borderRadius:"50%",background:h.color,
+              border:d.appearance.hairColor===h.id?"3px solid var(--gold)":"3px solid transparent",
+              cursor:"pointer",transition:"border .15s",
+              boxShadow:"0 1px 4px rgba(0,0,0,0.4)",
+            }} title={h.name}/>
+          ))}
+        </div>
+      </div>
+
+      {/* Face */}
+      <div className="ig">
+        <label>Expression</label>
+        <div className="bgrp">
+          {FACE_STYLES.map(f => (
+            <button key={f.id} className={`bc ${d.appearance.faceStyle===f.id?"active":""}`}
+              onClick={()=>setApp("faceStyle",f.id)}>{f.name}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Body type */}
+      <div className="ig">
+        <label>Build</label>
+        <div className="bgrp">
+          {BODY_TYPES.map(b => (
+            <button key={b.id} className={`bc ${d.appearance.bodyType===b.id?"active":""}`}
+              onClick={()=>setApp("bodyType",b.id)}>{b.name}</button>
+          ))}
+        </div>
+      </div>
+
+      <button className="btn-primary" onClick={()=>setStep(3)}>Continue</button>
+    </div>,
+
+    // 3 — Goal
     <div key="g" className="ob-step">
       <h2>Choose Your Goal</h2>
       <div className="goal-grid">{GOALS.map(g=><button key={g} className={`goal-card ${d.goal===g?"active":""}`} onClick={()=>setD({...d,goal:g})}><span style={{fontSize:"2rem"}}>{g==="Lift Heavier"?"🏋️":g==="Build Muscle"?"💪":g==="Get Lean"?"⚡":"🔥"}</span><span>{g}</span></button>)}</div>
-      <button className="btn-primary" onClick={()=>setStep(3)} disabled={!d.goal}>Continue</button>
+      <button className="btn-primary" onClick={()=>setStep(4)} disabled={!d.goal}>Continue</button>
     </div>,
+
+    // 4 — Schedule
     <div key="s" className="ob-step">
       <h2>Your Schedule</h2>
       <div className="ig"><label>Days per week</label><div className="bgrp">{["3","4","5","6","Every"].map(x=><button key={x} className={`bc ${d.days===x?"active":""}`} onClick={()=>setD({...d,days:x})}>{x}</button>)}</div></div>
@@ -1497,16 +1853,29 @@ function Onboarding({ onComplete }) {
       <div className="ig" style={{marginTop:"1.5rem"}}><label>Workout Planning</label>
         <div style={{display:"flex",flexDirection:"column",gap:".5rem"}}>{[["I'll Plan All","manual"],["Hybrid","hybrid"],["Plan Everything For Me","auto"]].map(([l,v])=><button key={v} className={`pbtn ${d.planning===v?"active":""}`} onClick={()=>setD({...d,planning:v})}>{l}</button>)}</div>
       </div>
-      <button className="btn-primary" onClick={()=>setStep(4)} disabled={!d.days||!d.experience}>Continue</button>
+      <button className="btn-primary" onClick={()=>setStep(5)} disabled={!d.days||!d.experience}>Continue</button>
     </div>,
+
+    // 5 — Class
     <div key="c" className="ob-step">
-      <h2>Choose Your Class</h2><p className="sdesc">Your class determines starting weapons and bonuses</p>
+      <h2>Choose Your Class</h2>
+      <p className="sdesc">Your class determines starting weapons and bonuses</p>
+      {/* Preview with class color */}
+      <div style={{display:"flex",justifyContent:"center",marginBottom:"1rem",background:"linear-gradient(135deg,#1a0a2e,#0d0820)",borderRadius:16,padding:"1rem",border:`1px solid ${d.cls?.color||"#c9a84c"}33`}}>
+        <CharacterSVG appearance={d.appearance} equipped={{}} size={80}/>
+        {d.cls && <div style={{display:"flex",flexDirection:"column",justifyContent:"center",marginLeft:"1rem"}}>
+          <div style={{fontFamily:"'Cinzel',serif",color:d.cls.color,fontWeight:700,fontSize:"1.1rem"}}>{d.cls.name}</div>
+          <div style={{fontSize:".75rem",color:"var(--gold)",marginTop:".2rem"}}>{d.cls.bonus}</div>
+        </div>}
+      </div>
       <div className="cls-grid">{CLASSES.map(cls=><button key={cls.id} className={`cls-card ${d.cls?.id===cls.id?"active":""}`} style={{"--cc":cls.color}} onClick={()=>setD({...d,cls})}><span style={{fontSize:"2rem"}}>{cls.icon}</span><strong>{cls.name}</strong><span style={{fontSize:".8rem",color:"var(--gold)"}}>{cls.bonus}</span><span style={{fontSize:".7rem",color:"var(--text2)"}}>{cls.weapons.slice(0,3).join(", ")}{cls.weapons.length>3?"...":""}</span></button>)}</div>
-      <button className="btn-primary" onClick={()=>onComplete(d)} disabled={!d.cls}>Forge Your Character</button>
-    </div>];
+      <button className="btn-primary" onClick={()=>onComplete(d)} disabled={!d.cls}>⚒️ Forge Your Character</button>
+    </div>,
+  ];
+
   return (
     <div className="onboarding">
-      {step > 0 && <div className="prog-bar"><div className="prog-fill" style={{width:`${(step/4)*100}%`}}/></div>}
+      {step > 0 && <div className="prog-bar"><div className="prog-fill" style={{width:`${(step/TOTAL_STEPS)*100}%`}}/></div>}
       {steps[step]}
     </div>
   );
@@ -1526,7 +1895,9 @@ function EditProfileModal({ character, onSave, onClose }) {
     experience:  character.experience,
     results:     character.results || [],
     planning:    character.planning,
+    appearance:  character.appearance || { skinTone:"s2", hairStyle:"h1", hairColor:"hc1", faceStyle:"f1", bodyType:"b2" },
   });
+  const setApp = (key, val) => setD(prev => ({...prev, appearance:{...prev.appearance,[key]:val}}));
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="item-modal" style={{borderColor:"var(--gold)",maxHeight:"88vh"}} onClick={e=>e.stopPropagation()}>
@@ -1536,6 +1907,32 @@ function EditProfileModal({ character, onSave, onClose }) {
           <button className="btn-x" onClick={onClose}>✕</button>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:"1rem",overflowY:"auto",maxHeight:"60vh"}}>
+          {/* Appearance section */}
+          <div style={{background:"var(--surface2)",borderRadius:10,padding:".75rem"}}>
+            <div style={{fontFamily:"'Cinzel',serif",fontSize:".8rem",color:"var(--gold)",marginBottom:".75rem"}}>⚔️ Appearance</div>
+            <div style={{display:"flex",justifyContent:"center",marginBottom:".75rem"}}>
+              <CharacterSVG appearance={d.appearance} equipped={character.equipped||{}} size={80}/>
+            </div>
+            <div className="ig"><label>Skin Tone</label>
+              <div style={{display:"flex",gap:".4rem",flexWrap:"wrap"}}>
+                {SKIN_TONES.map(s=><button key={s.id} onClick={()=>setApp("skinTone",s.id)} style={{width:28,height:28,borderRadius:"50%",background:s.color,border:d.appearance.skinTone===s.id?"3px solid var(--gold)":"3px solid transparent",cursor:"pointer"}} title={s.name}/>)}
+              </div>
+            </div>
+            <div className="ig"><label>Hair Style</label>
+              <div className="bgrp">{HAIR_STYLES.map(h=><button key={h.id} className={`bc ${d.appearance.hairStyle===h.id?"active":""}`} onClick={()=>setApp("hairStyle",h.id)}>{h.name}</button>)}</div>
+            </div>
+            <div className="ig"><label>Hair Color</label>
+              <div style={{display:"flex",gap:".4rem",flexWrap:"wrap"}}>
+                {HAIR_COLORS.map(h=><button key={h.id} onClick={()=>setApp("hairColor",h.id)} style={{width:24,height:24,borderRadius:"50%",background:h.color,border:d.appearance.hairColor===h.id?"3px solid var(--gold)":"3px solid transparent",cursor:"pointer",boxShadow:"0 1px 3px rgba(0,0,0,.5)"}} title={h.name}/>)}
+              </div>
+            </div>
+            <div className="ig"><label>Expression</label>
+              <div className="bgrp">{FACE_STYLES.map(f=><button key={f.id} className={`bc ${d.appearance.faceStyle===f.id?"active":""}`} onClick={()=>setApp("faceStyle",f.id)}>{f.name}</button>)}</div>
+            </div>
+            <div className="ig"><label>Build</label>
+              <div className="bgrp">{BODY_TYPES.map(b=><button key={b.id} className={`bc ${d.appearance.bodyType===b.id?"active":""}`} onClick={()=>setApp("bodyType",b.id)}>{b.name}</button>)}</div>
+            </div>
+          </div>
           <div className="ig"><label>Display Name</label><input value={d.displayName} onChange={e=>setD({...d,displayName:e.target.value})}/></div>
           <div className="ig"><label>Username</label><input value={d.username} onChange={e=>setD({...d,username:e.target.value})}/></div>
           <div className="ig"><label>Gender</label><div className="bgrp">{["M","F","N"].map(g=><button key={g} className={`bc ${d.gender===g?"active":""}`} onClick={()=>setD({...d,gender:g})}>{g==="M"?"Male":g==="F"?"Female":"Non-binary"}</button>)}</div></div>
@@ -2299,13 +2696,11 @@ Give a response that is:
 
 Keep it under 80 words. Speak directly to them (use "you"). No bullet points. No emoji.`;
 
-      const apiKey = import.meta?.env?.VITE_ANTHROPIC_KEY || null;
-      if (!apiKey) { setAiResponse("AI coach unavailable — add VITE_ANTHROPIC_KEY to enable."); setAiLoading(false); return; }
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST",
-        headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},
+        headers:{"Content-Type":"application/json"},
         body: JSON.stringify({
-          model:"claude-haiku-4-5-20251001",
+          model:"claude-sonnet-4-20250514",
           max_tokens:150,
           messages:[{role:"user", content:prompt}],
         }),
@@ -3355,9 +3750,10 @@ function FitnessTab({ character, onWorkoutComplete, onAvatarClick, onSaveCustomP
               </div>
               <div className="wh-avatar"
                 style={{borderColor:avatarBorderColor, cursor:"pointer",
-                  filter:avatarFilter, transition:"filter .5s, border-color .5s"}}
+                  filter:avatarFilter, transition:"filter .5s, border-color .5s",
+                  overflow:"hidden", padding:2, background:"transparent"}}
                 onClick={onAvatarClick}>
-                {character.cls?.icon}
+                <CharacterSVG appearance={character.appearance||{}} equipped={character.equipped||{}} size={64}/>
               </div>
             </div>
 
@@ -5364,30 +5760,22 @@ function ExerciseLibraryView() {
 }
 
 // ─── SPRITE COMPONENTS ───────────────────────────────────────────────────────
-function HeroSprite({ cls, isHit }) {
+function HeroSprite({ cls, isHit, character }) {
   return (
-    <img
-      src="data:image/png;base64,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"
-      alt="Hero"
-      style={{
-        width: 65,
-        height: 73,
-        imageRendering: "pixelated",
-        objectFit: "contain",
-        objectPosition: "bottom center",
-        filter: isHit ? "brightness(3) saturate(0)" : "none",
-        transition: "filter .1s",
-        display: "block",
-      }}
-    />
+    <div style={{
+      filter: isHit ? "brightness(3) saturate(0)" : "none",
+      transition: "filter .1s",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      width: 65, height: 73,
+    }}>
+      <CharacterSVG
+        appearance={character?.appearance || {}}
+        equipped={character?.equipped || {}}
+        size={65}
+      />
+    </div>
   );
 }
-
-
-
-
-
-
 
 
 const ENEMY_SPRITES = {
@@ -6345,7 +6733,7 @@ function DungeonTab({ character, onItemKept, onItemSold, onItemEquipped, onDunge
               {combat.pHP>=1000?`${(combat.pHP/1000).toFixed(1)}K`:combat.pHP}
             </span>
           </div>
-          <HeroSprite cls={character.cls} isHit={hitFlash==="player"}/>
+          <HeroSprite cls={character.cls} isHit={hitFlash==="player"} character={character}/>
           {/* Status effect icons */}
           {(combat.statusEffects||[]).length > 0 && (
             <div style={{display:"flex",gap:2,marginTop:2,flexWrap:"wrap",justifyContent:"center",maxWidth:70}}>
@@ -7550,7 +7938,7 @@ function CharacterTab({ character, onEquip, onUnequip, onSellItem, onAllocateSta
             </div>
             <div className="equip-center">
               <div className="char-portrait" style={{borderColor:character.cls?.color||"var(--gold)",padding:".5rem .25rem"}}>
-                <HeroSprite cls={character.cls} isHit={false}/>
+                <HeroSprite cls={character.cls} isHit={false} character={character}/>
                 <div style={{fontSize:".7rem",color:"var(--text2)",marginTop:".3rem",textAlign:"center"}}>{character.displayName}</div>
                 <div style={{fontSize:".85rem",fontWeight:700,fontFamily:"'Cinzel',serif",color:character.cls?.color}}>Lv.{level}</div>
               </div>
@@ -9527,8 +9915,6 @@ export default function ForgedApp() {
       newItems: [],
       rivals: [],
       personalChallenges: [],
-      stamina: 20,
-      staminaLastRegen: Date.now(),
     });
     setScreen("main");
     // Save new character to cloud if logged in
